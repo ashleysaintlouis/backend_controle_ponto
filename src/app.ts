@@ -35,9 +35,10 @@ app.use('/api/overtime', overtimeRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/notifications', notificationRoutes);
 
+
 /**
  * @openapi
- * /health:
+ * /:
  *   get:
  *     summary: Health check da API
  *     tags: [Sistema]
@@ -56,12 +57,13 @@ app.use('/api/notifications', notificationRoutes);
  *                 service:
  *                   type: string
  */
-app.get('/health', async (req: Request, res: Response) => {
+app.get('/', async (req: Request, res: Response) => {
   return res.status(200).json({
     status: 'ONLINE',
     timestamp: new Date().toISOString(),
     service: 'Sistema de Controle de Ponto API',
   });
 });
+
 
 export default app;
