@@ -15,6 +15,5 @@ RUN npm run build
 
 EXPOSE 3333
 
-# Executa a atualização/migração no banco do Neon e em seguida inicia o servidor
-CMD ["sh", "-c", "npx prisma db update || npx prisma db migrate && npm start"]
-
+# Executa o push do schema para o Neon e inicia o servidor
+CMD ["sh", "-c", "npx prisma db push && npm start"]
