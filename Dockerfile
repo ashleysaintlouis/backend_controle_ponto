@@ -1,5 +1,8 @@
 FROM node:22-bookworm-slim
 
+# Instala o OpenSSL exigido pelo Prisma
+RUN apt-get update -y && apt-get install -y openssl
+
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -12,5 +15,4 @@ RUN npm run build
 
 EXPOSE 3333
 
-# Modificado para rodar as migrações e depois iniciar o servidor
 CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]
