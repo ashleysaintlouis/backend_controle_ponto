@@ -1,0 +1,343 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum TimeFormat {
+  H24
+  H12
+}
+
+enum TimeEntryType {
+  CLOCK_IN
+  BREAK_START
+  BREAK_END
+  CLOCK_OUT
+  MANUAL
+}
+
+enum OccurrenceType {
+  PERSONAL_WITH_RETURN
+  PERSONAL_WITHOUT_RETURN
+  COMPANY_ACTIVITY
+}
+
+enum TimeEntryAuditAction {
+  CREATED
+  UPDATED
+  DELETED
+}
+
+enum ScheduleExceptionType {
+  HOLIDAY
+  DAY_OFF
+  WORKDAY_OVERRIDE
+}
+
+enum TimeBankMovementType {
+  CREDIT
+  DEBIT
+  ADJUSTMENT
+}
+
+enum NotificationType {
+  MISSED_CLOCK_IN
+  CLOCK_OUT_REMINDER
+  TOLERANCE_EXCEEDED
+}
+
+enum NotificationStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  READ
+}
+
+enum SecurityEventType {
+  ACCOUNT_REGISTERED
+  LOGIN_SUCCEEDED
+  LOGIN_FAILED
+  GOOGLE_LOGIN_SUCCEEDED
+  PASSWORD_RECOVERY_REQUESTED
+  PASSWORD_RESET_SUCCEEDED
+  LOGOUT
+}
+
+model User {
+  id                     String     @id @default(uuid()) @db.Uuid
+  name                   String
+  email                  String     @unique
+  passwordHash           String
+  googleId               String?    @unique
+  setupCompleted         Boolean    @default(false)
+  passwordResetToken     String?    @db.VarChar(255)
+  passwordResetExpiresAt DateTime?  @db.Timestamptz(6)
+  status                 UserStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  preference  UserPreference?
+  timeEntries TimeEntry[]
+  timeEntryAudits TimeEntryAudit[]
+  occurrences Occurrence[]
+  schedules   WeeklySchedule[]
+  schedulePolicy SchedulePolicy?
+  scheduleExceptions ScheduleException[]
+  overtimeSettings OvertimeSettings?
+  overtimeEntries OvertimeEntry[]
+  timeBankMovements TimeBankMovement[]
+  notifications Notification[]
+  securityEvents SecurityEvent[]
+
+  @@map("users")
+}
+
+model UserPreference {
+  id         String     @id @default(uuid()) @db.Uuid
+  userId     String     @unique @db.Uuid
+  timeFormat TimeFormat @default(H24)
+  timezone   String     @default("America/Sao_Paulo")
+  language   String     @default("pt-BR")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model TimeEntry {
+  id        String        @id @default(uuid()) @db.Uuid
+  userId    String        @db.Uuid
+  type      TimeEntryType
+  timestamp DateTime      @db.Timestamptz(6)
+  isManual  Boolean       @default(false)
+  notes     String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  audits TimeEntryAudit[]
+  images ImageAttachment[]
+
+  @@index([userId, timestamp])
+  @@map("time_entries")
+}
+
+model TimeEntryAudit {
+  id          String               @id @default(uuid()) @db.Uuid
+  userId      String               @db.Uuid
+  timeEntryId String?              @db.Uuid
+  action      TimeEntryAuditAction
+  reason      String               @db.Text
+  beforeData  Json?
+  afterData   Json?
+  createdAt   DateTime             @default(now()) @db.Timestamptz(6)
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timeEntry TimeEntry? @relation(fields: [timeEntryId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@map("time_entry_audits")
+}
+
+model Occurrence {
+  id        String         @id @default(uuid()) @db.Uuid
+  userId    String         @db.Uuid
+  type      OccurrenceType
+  startAt   DateTime       @db.Timestamptz(6)
+  endAt     DateTime?      @db.Timestamptz(6)
+  notes     String         @db.VarChar(500)
+  createdAt DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime       @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  images ImageAttachment[]
+
+  @@index([userId, startAt])
+  @@map("occurrences")
+}
+
+model ImageAttachment {
+  id           String   @id @default(uuid()) @db.Uuid
+  occurrenceId String?  @db.Uuid
+  timeEntryId  String?  @db.Uuid
+  fileName     String   @db.VarChar(255)
+  contentType  String   @db.VarChar(100)
+  sizeBytes    Int
+  data         Bytes
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  occurrence Occurrence? @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  timeEntry  TimeEntry?  @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
+
+  @@index([occurrenceId])
+  @@index([timeEntryId])
+  @@map("image_attachments")
+}
+
+model WeeklySchedule {
+  id                      String   @id @default(uuid()) @db.Uuid
+  userId                  String   @db.Uuid
+  dayOfWeek               Int
+  isWorkday               Boolean  @default(true)
+  dailyWorkMinutes        Int      @default(480)
+  startTime               String   @default("09:00") @db.VarChar(5)
+  endTime                 String   @default("18:00") @db.VarChar(5)
+  breakStart              String?  @db.VarChar(5)
+  breakEnd                String?  @db.VarChar(5)
+  entryToleranceMinutes   Int      @default(10)
+  exitToleranceMinutes    Int      @default(10)
+  breakStartToleranceMinutes Int   @default(10)
+  breakEndToleranceMinutes   Int   @default(10)
+  createdAt               DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  periods WeeklySchedulePeriod[]
+
+  @@unique([userId, dayOfWeek])
+  @@index([userId, dayOfWeek])
+  @@map("weekly_schedules")
+}
+
+model SchedulePolicy {
+  id                          String   @id @default(uuid()) @db.Uuid
+  userId                      String   @unique @db.Uuid
+  defaultDailyWorkMinutes     Int      @default(480)
+  entryToleranceMinutes       Int      @default(10)
+  exitToleranceMinutes        Int      @default(10)
+  breakStartToleranceMinutes Int      @default(10)
+  breakEndToleranceMinutes   Int      @default(10)
+  createdAt                   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt                   DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("schedule_policies")
+}
+
+model WeeklySchedulePeriod {
+  id               String   @id @default(uuid()) @db.Uuid
+  weeklyScheduleId String   @db.Uuid
+  order            Int
+  startTime        String   @db.VarChar(5)
+  endTime          String   @db.VarChar(5)
+  createdAt        DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(6)
+
+  weeklySchedule WeeklySchedule @relation(fields: [weeklyScheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([weeklyScheduleId, order])
+  @@map("weekly_schedule_periods")
+}
+
+model ScheduleException {
+  id        String                @id @default(uuid()) @db.Uuid
+  userId    String                @db.Uuid
+  date      DateTime              @db.Date
+  type      ScheduleExceptionType
+  note      String?               @db.VarChar(300)
+  startTime String?               @db.VarChar(5)
+  endTime   String?               @db.VarChar(5)
+  createdAt DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime              @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("schedule_exceptions")
+}
+
+model OvertimeSettings {
+  id                    String   @id @default(uuid()) @db.Uuid
+  userId                String   @unique @db.Uuid
+  enabled               Boolean  @default(true)
+  timeBankEnabled       Boolean  @default(true)
+  monthlyLimitMinutes   Int?
+  createdAt             DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("overtime_settings")
+}
+
+model OvertimeEntry {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @db.Uuid
+  date           DateTime @db.Date
+  minutes        Int
+  includeInMonth Boolean?
+  reason         String?  @db.VarChar(500)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@map("overtime_entries")
+}
+
+model TimeBankMovement {
+  id        String               @id @default(uuid()) @db.Uuid
+  userId    String               @db.Uuid
+  date      DateTime             @db.Date
+  type      TimeBankMovementType
+  minutes   Int
+  reason    String               @db.VarChar(500)
+  createdAt DateTime             @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@map("time_bank_movements")
+}
+
+model Notification {
+  id          String             @id @default(uuid()) @db.Uuid
+  userId      String             @db.Uuid
+  type        NotificationType
+  status      NotificationStatus @default(PENDING)
+  message     String             @db.VarChar(500)
+  scheduledAt DateTime           @db.Timestamptz(6)
+  dedupeKey   String             @unique @db.VarChar(255)
+  sentAt      DateTime?          @db.Timestamptz(6)
+  readAt      DateTime?          @db.Timestamptz(6)
+  createdAt   DateTime           @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, scheduledAt])
+  @@map("notifications")
+}
+
+model SecurityEvent {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String?          @db.Uuid
+  email     String           @db.VarChar(255)
+  type      SecurityEventType
+  ipAddress String?          @db.VarChar(64)
+  userAgent String?          @db.VarChar(500)
+  createdAt DateTime         @default(now()) @db.Timestamptz(6)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([email, createdAt])
+  @@index([userId, createdAt])
+  @@map("security_events")
+}
