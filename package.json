@@ -9,7 +9,7 @@
     "build": "tsc --project tsconfig.json",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate": "prisma migrate dev --name init_full_database",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio"
   },
