@@ -11,4 +11,6 @@ RUN DATABASE_URL=postgresql://build:build@localhost:5432/build npx prisma genera
 RUN npm run build
 
 EXPOSE 3333
-CMD ["npm", "start"]
+
+# Modificado para rodar as migrações e depois iniciar o servidor
+CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]
